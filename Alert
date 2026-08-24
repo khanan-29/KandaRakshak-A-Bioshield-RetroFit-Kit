@@ -1,0 +1,44 @@
+function logAndAlert() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+
+  var url = "https://wttr.in/Nashik?format=j1";
+
+  try {
+    var response = UrlFetchApp.fetch(url, {muteHttpExceptions: true});
+    var data = JSON.parse(response.getContentText());
+    var temp = data.current_condition[0].temp_C;
+    var humidity = data.current_condition[0].humidity;
+
+    var status = "Normal";
+    var lowThreshold = 40;   // ambient air is too dry below this therefor there is risk of over-drying
+    var highThreshold = 85;  // ambient air is too humid above this so passive treatment needed to fully compensate
+
+    if (humidity < lowThreshold || humidity > highThreshold) {
+      status = "ALERT: Out of range";
+      sendTelegramAlert(temp, humidity);
+    }
+
+    sheet.appendRow([new Date(), temp, humidity, status]);
+  } catch (e) {
+    sheet.appendRow([new Date(), "N/A", "N/A", "Script error: " + e.message]);
+  }
+}
+
+function sendTelegramAlert(temp, humidity) {
+  var props = PropertiesService.getScriptProperties();
+  var token = props.getProperty("BOT_TOKEN");
+  var chatId = props.getProperty("CHAT_ID");
+  var message = "KandaRakshak Alert: Humidity is " + humidity +
+                "%, Temp is " + temp + "\u00b0C \u2014 outside optimal range for passive treatment.";
+
+  var url = "https://api.telegram.org/bot" + token + "/sendMessage";
+  var payload = {
+    chat_id: chatId,
+    text: message
+  };
+  var options = {
+    method: "post",
+    payload: payload
+  };
+  UrlFetchApp.fetch(url, options);
+}
