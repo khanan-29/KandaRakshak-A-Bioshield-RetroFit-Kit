@@ -1,0 +1,279 @@
+# KandaRakshak Smart IoT Prototype (Light Brown Wood, Purplish Red Onions & Emerald Green Top VOC Layer)
+
+import numpy as np
+import trimesh
+
+# ==============================================================================
+# 1. COLOR PALETTE (RGBA)
+# ==============================================================================
+# Wooden Crate Framing & Enclosure
+COLOR_WOOD = [205, 160, 115, 255]          # Light Brown Wooden Crate Frame & Slats
+COLOR_WOOD_STEM = [145, 95, 60, 255]       # Deep Dry Root / Stem Color
+COLOR_PLASTIC_DARK = [35, 35, 35, 255]     # Base Manifold, Enclosures & Mounts
+COLOR_HEADER_METAL = [45, 48, 52, 255]     # Dark Solar Chimney Hood
+COLOR_STAINLESS_STEEL = [195, 200, 205, 255] # Metallic Stainless Steel Aeration Plates
+COLOR_INTAKE_MESH = [160, 165, 170, 210]   # Wire Mesh
+
+# Tri-Layer Preservation Media
+COLOR_ZEOLITE = [235, 235, 225, 255]       # Layer 3: Zeolite Bed
+COLOR_BIOCHAR = [45, 25, 60, 255]          # Layer 2: Impregnated Biochar Bed
+COLOR_VOC_PAD = [30, 180, 100, 255]        # Layer 1: Antifungal Vapor Sheet (CHANGED TO EMERALD GREEN)
+
+# Purplish Red Onions
+COLOR_RED_ONION_A = [125, 30, 75, 255]     # Deep Red/Purple
+COLOR_RED_ONION_B = [105, 22, 62, 255]     # Burgundy Magenta
+
+# Biosensor Card Backplate & Divider
+COLOR_CARD_BASE = [245, 245, 240, 255]     # Off-white / Cream Tag Backplate
+COLOR_CARD_BORDER = [80, 80, 85, 255]      # Card Divider Line
+
+# Dual-State Colorimetric Biosensor Indicators (Fresh State vs Triggered/Rot State)
+COLOR_BISMUTH_FRESH = [242, 218, 38, 255]  # Fresh: Bright Yellow
+COLOR_BISMUTH_ROT = [45, 32, 25, 255]      # H2S Gas Detected: Dark Brown/Black
+
+COLOR_ANTHO_FRESH = [142, 58, 148, 255]    # Fresh: Purple/Red
+COLOR_ANTHO_ROT = [48, 138, 92, 255]       # Ammonia Shift Detected: Blue-Green
+
+COLOR_CUCL2_FRESH = [145, 92, 52, 255]     # Fresh: Brown
+COLOR_CUCL2_HUMID = [38, 118, 195, 255]    # High RH (>80%): Blue
+
+# Active Sensor Suite
+COLOR_GAS_SENSOR = [35, 160, 80, 255]      # Green: MQ-136 / MOS Volatile Sulfur Gas Sensor
+COLOR_THERMAL_PROBE = [220, 45, 40, 255]   # Red: Micro-Thermal Needle Probe
+COLOR_HUMIDITY_PROBE = [35, 130, 230, 255] # Blue: Digital Humidity Probe (RH > 80%)
+
+# Dual Camera System & Local Alert Beacon
+COLOR_RGB_CAM_BODY = [22, 22, 24, 255]     # Black Enclosure: RGB Wide-Angle Camera
+COLOR_RGB_CAM_LENS = [45, 125, 210, 255]   # Blue AR Optical Lens
+COLOR_IR_CAM_BODY = [75, 25, 105, 255]     # Purple Enclosure: Thermal IR Micro-Camera
+COLOR_IR_CAM_LENS = [170, 85, 235, 255]    # Germanium / Thermal IR Lens
+COLOR_LED_ALERT = [245, 30, 30, 255]       # Red Shelf Alert LED Beacon
+
+# ==============================================================================
+# 2. GEOMETRY HELPER FUNCTIONS
+# ==============================================================================
+def box(ext, pos, color):
+    m = trimesh.creation.box(extents=ext)
+    m.apply_translation(pos)
+    m.visual.face_colors = color
+    return m
+
+def cyl(r, h, pos, color):
+    m = trimesh.creation.cylinder(radius=r, height=h)
+    m.apply_translation(pos)
+    m.visual.face_colors = color
+    return m
+
+def cone(r, h, pos, color):
+    m = trimesh.creation.cone(radius=r, height=h)
+    m.apply_translation(pos)
+    m.visual.face_colors = color
+    return m
+
+def perforated_plate(extents, pos, hole_r=0.012, grid_size=(8, 8), color=COLOR_STAINLESS_STEEL):
+    base_plate = trimesh.creation.box(extents=extents)
+    x_coords = np.linspace(-extents[0] * 0.4, extents[0] * 0.4, grid_size[0])
+    y_coords = np.linspace(-extents[1] * 0.4, extents[1] * 0.4, grid_size[1])
+
+    holes = []
+    for x in x_coords:
+        for y in y_coords:
+            h = trimesh.creation.cylinder(radius=hole_r, height=extents[2] * 1.5)
+            h.apply_translation([x, y, 0])
+            holes.append(h)
+
+    if holes:
+        all_holes = trimesh.util.concatenate(holes)
+        try:
+            plate = base_plate.difference(all_holes)
+        except Exception:
+            plate = base_plate
+    else:
+        plate = base_plate
+
+    plate.apply_translation(pos)
+    plate.visual.face_colors = color
+    return plate
+
+def purple_onion(r, pos, seed=0):
+    body_color = COLOR_RED_ONION_A if seed % 2 == 0 else COLOR_RED_ONION_B
+    b = trimesh.creation.icosphere(radius=r, subdivisions=2)
+    b.apply_transform(np.diag([1.0, 1.0, 0.75, 1.0]))
+    b.visual.face_colors = body_color
+
+    t = trimesh.creation.cone(radius=r * 0.25, height=r * 0.5)
+    t.apply_translation([0, 0, r * 0.65])
+    t.visual.face_colors = COLOR_WOOD_STEM
+
+    o = trimesh.util.concatenate([b, t])
+    o.apply_translation(pos)
+    return o
+
+def dual_indicator_card(pos, c_fresh, c_react):
+    card_w, card_d, card_h = 0.085, 0.004, 0.024
+    pad_w, pad_d, pad_h = 0.032, 0.002, 0.016
+    
+    meshes = []
+    meshes.append(box([card_w, card_d, card_h], pos, COLOR_CARD_BASE))
+    meshes.append(box([0.002, card_d + 0.001, card_h * 0.85], [pos[0], pos[1] - 0.001, pos[2]], COLOR_CARD_BORDER))
+    meshes.append(box([pad_w, pad_d, pad_h], [pos[0] - 0.021, pos[1] - (card_d / 2.0 + 0.001), pos[2]], c_fresh))
+    meshes.append(box([pad_w, pad_d, pad_h], [pos[0] + 0.021, pos[1] - (card_d / 2.0 + 0.001), pos[2]], c_react))
+    return meshes
+
+# Master list to store all generated meshes
+all_meshes = []
+
+# ==============================================================================
+# 3. WOODEN BASE CRATE PIECES
+# ==============================================================================
+all_meshes.append(box([1.22, 0.08, 0.04], [0, -0.54, 0.02], COLOR_WOOD))
+all_meshes.append(box([1.22, 0.08, 0.04], [0, 0.54, 0.02], COLOR_WOOD))
+all_meshes.append(box([0.08, 1.00, 0.04], [-0.54, 0, 0.02], COLOR_WOOD))
+all_meshes.append(box([0.08, 1.00, 0.04], [0.54, 0, 0.02], COLOR_WOOD))
+
+# ==============================================================================
+# 4. FULL-COVERAGE SORBENT INLET
+# ==============================================================================
+inlet_z_start = 0.04
+inlet_height = 0.08
+z_inlet_mid = inlet_z_start + (inlet_height / 2.0)
+wall_thick = 0.03
+full_w = 1.20
+
+all_meshes.append(box([full_w, full_w, 0.015], [0, 0, inlet_z_start + 0.0075], COLOR_PLASTIC_DARK))
+
+win_w = 0.38
+win_h = 0.045
+mesh_thick = 0.005
+
+for x_off in [-0.28, 0.28]:
+    all_meshes.append(box([win_w, mesh_thick, win_h], [x_off, -full_w / 2.0, z_inlet_mid], COLOR_INTAKE_MESH))
+    all_meshes.append(box([win_w, mesh_thick, win_h], [x_off, full_w / 2.0, z_inlet_mid], COLOR_INTAKE_MESH))
+
+for y_off in [-0.28, 0.28]:
+    all_meshes.append(box([mesh_thick, win_w, win_h], [-full_w / 2.0, y_off, z_inlet_mid], COLOR_INTAKE_MESH))
+    all_meshes.append(box([mesh_thick, win_w, win_h], [full_w / 2.0, y_off, z_inlet_mid], COLOR_INTAKE_MESH))
+
+for x in [-0.585, 0.0, 0.585]:
+    for y in [-0.585, 0.585]:
+        all_meshes.append(box([0.10, wall_thick, win_h], [x, y, z_inlet_mid], COLOR_PLASTIC_DARK))
+
+for y in [-0.585, 0.0, 0.585]:
+    for x in [-0.585, 0.585]:
+        all_meshes.append(box([wall_thick, 0.10, win_h], [x, y, z_inlet_mid], COLOR_PLASTIC_DARK))
+
+# ==============================================================================
+# 5. PERFORATED MESH LAYER
+# ==============================================================================
+z_sub_mesh = inlet_z_start + inlet_height
+Y_C = -0.02
+Y_L = 1.12
+all_meshes.append(perforated_plate([1.14, Y_L + 0.02, 0.006], [0, Y_C - 0.01, z_sub_mesh]))
+
+# ==============================================================================
+# 6. CRATE FRAME & SLATS
+# ==============================================================================
+for x, y in [(-0.575, -0.575), (-0.575, 0.575), (0.575, -0.575), (0.575, 0.575)]:
+    all_meshes.append(box([0.05, 0.05, 0.96], [x, y, z_sub_mesh + 0.48], COLOR_WOOD))
+
+slat_z_positions = np.linspace(z_sub_mesh + 0.05, z_sub_mesh + 0.90, 10)
+for z_slat in slat_z_positions:
+    all_meshes.append(box([0.02, 1.10, 0.085], [-0.575, 0, z_slat], COLOR_WOOD))
+    all_meshes.append(box([0.02, 1.10, 0.085], [0.575, 0, z_slat], COLOR_WOOD))
+    all_meshes.append(box([1.10, 0.02, 0.085], [0, 0.575, z_slat], COLOR_WOOD))
+
+# ==============================================================================
+# 7. CASSETTE LAYERS (Sorbent & Antifungal Stack)
+# ==============================================================================
+z_layer1 = z_sub_mesh + 0.025
+all_meshes.append(box([1.08, Y_L, 0.045], [0, Y_C, z_layer1], COLOR_ZEOLITE))
+
+z_mesh1 = z_layer1 + 0.0255
+all_meshes.append(perforated_plate([1.12, Y_L + 0.02, 0.006], [0, Y_C - 0.01, z_mesh1]))
+
+z_layer2 = z_mesh1 + 0.025
+all_meshes.append(box([1.08, Y_L, 0.045], [0, Y_C, z_layer2], COLOR_BIOCHAR))
+
+z_mesh2 = z_layer2 + 0.0255
+all_meshes.append(perforated_plate([1.12, Y_L + 0.02, 0.006], [0, Y_C - 0.01, z_mesh2]))
+
+# Layer directly above sorbent beds: VOC Antifungal Sheet (Updated to Emerald Green)
+z_layer3 = z_mesh2 + 0.018
+all_meshes.append(box([1.08, Y_L, 0.030], [0, Y_C, z_layer3], COLOR_VOC_PAD))
+
+z_mesh_top = z_layer3 + 0.018
+all_meshes.append(perforated_plate([1.12, Y_L + 0.02, 0.006], [0, Y_C - 0.01, z_mesh_top]))
+
+# ==============================================================================
+# 8. CROP TIERS & INTEGRATED SENSOR NETWORK
+# ==============================================================================
+shelf_heights = [z_mesh_top + 0.05, z_mesh_top + 0.23, z_mesh_top + 0.41, z_mesh_top + 0.59]
+for z_sh in shelf_heights:
+    all_meshes.append(perforated_plate([1.10, 1.10, 0.008], [0, 0, z_sh], hole_r=0.015, grid_size=(10, 10)))
+    
+    for xi in range(6):
+        for yi in range(6):
+            xp = -0.42 + (xi * 0.168)
+            yp = -0.42 + (yi * 0.168)
+            all_meshes.append(purple_onion(0.040, [xp, yp, z_sh + 0.038], seed=(xi + yi)))
+
+    z_tag = z_sh + 0.016
+    y_tag = -0.556
+
+    all_meshes.extend(dual_indicator_card([-0.36, y_tag, z_tag], COLOR_BISMUTH_FRESH, COLOR_BISMUTH_ROT))
+    all_meshes.extend(dual_indicator_card([0.0, y_tag, z_tag], COLOR_ANTHO_FRESH, COLOR_ANTHO_ROT))
+    all_meshes.extend(dual_indicator_card([0.36, y_tag, z_tag], COLOR_CUCL2_FRESH, COLOR_CUCL2_HUMID))
+
+    all_meshes.append(box([0.030, 0.025, 0.030], [-0.48, -0.53, z_sh + 0.035], COLOR_PLASTIC_DARK))
+    all_meshes.append(cyl(0.011, 0.012, [-0.48, -0.52, z_sh + 0.035], COLOR_GAS_SENSOR))
+
+    all_meshes.append(cyl(0.004, 0.065, [0.0, -0.40, z_sh + 0.035], COLOR_THERMAL_PROBE))
+    all_meshes.append(box([0.016, 0.016, 0.016], [0.0, -0.40, z_sh + 0.070], COLOR_THERMAL_PROBE))
+
+    all_meshes.append(box([0.020, 0.020, 0.035], [0.48, -0.53, z_sh + 0.035], COLOR_PLASTIC_DARK))
+    all_meshes.append(cyl(0.009, 0.016, [0.48, -0.52, z_sh + 0.035], COLOR_HUMIDITY_PROBE))
+
+    all_meshes.append(cyl(0.006, 0.012, [-0.55, -0.55, z_sh + 0.040], COLOR_LED_ALERT))
+
+    all_meshes.append(box([0.030, 0.040, 0.030], [-0.53, -0.48, z_sh + 0.085], COLOR_RGB_CAM_BODY))
+    all_meshes.append(cyl(0.008, 0.008, [-0.53, -0.458, z_sh + 0.085], COLOR_RGB_CAM_LENS))
+    all_meshes.append(box([0.008, 0.003, 0.008], [-0.53, -0.458, z_sh + 0.096], COLOR_CARD_BASE))
+
+    all_meshes.append(box([0.030, 0.040, 0.030], [0.53, -0.48, z_sh + 0.085], COLOR_IR_CAM_BODY))
+    all_meshes.append(cyl(0.008, 0.008, [0.53, -0.458, z_sh + 0.085], COLOR_IR_CAM_LENS))
+
+# ==============================================================================
+# 9. CHIMNEY HEADER & GSM CONTROLLER HUB
+# ==============================================================================
+z_header = z_mesh_top + 0.78
+all_meshes.append(box([1.22, 1.22, 0.012], [0, 0, z_header], COLOR_HEADER_METAL))
+
+all_meshes.append(box([0.09, 0.06, 0.04], [0.42, -0.42, z_header + 0.025], COLOR_PLASTIC_DARK))
+all_meshes.append(cyl(0.004, 0.12, [0.45, -0.42, z_header + 0.09], COLOR_PLASTIC_DARK))
+
+all_meshes.append(cyl(0.12, 0.20, [0, 0, z_header + 0.106], COLOR_HEADER_METAL))
+all_meshes.append(cyl(0.14, 0.03, [0, 0, z_header + 0.206], COLOR_HEADER_METAL))
+
+for angle in [0, 90, 180, 270]:
+    rad = np.radians(angle)
+    all_meshes.append(cyl(0.005, 0.08, [0.11 * np.cos(rad), 0.11 * np.sin(rad), z_header + 0.246], COLOR_HEADER_METAL))
+
+all_meshes.append(cone(0.22, 0.08, [0, 0, z_header + 0.306], COLOR_HEADER_METAL))
+
+for bx, by in [(-0.58, -0.58), (-0.58, 0.58), (0.58, -0.58), (0.58, 0.58)]:
+    all_meshes.append(box([0.06, 0.06, 0.05], [bx, by, z_header], COLOR_HEADER_METAL))
+    kx = bx + (0.065 if bx > 0 else -0.065)
+    all_meshes.append(cyl(0.020, 0.02, [kx, by, z_header], COLOR_PLASTIC_DARK))
+
+# ==============================================================================
+# 10. JOIN AND EXPORT
+# ==============================================================================
+joined_mesh = trimesh.util.concatenate(all_meshes)
+joined_mesh.merge_vertices()
+
+joined_mesh.export("onion_system_single_mesh.stl")
+
+scene = trimesh.Scene(joined_mesh)
+scene.export("onion_system_figure_twin.glb")
+print("Export complete with updated emerald green top sorbent layer!")
+scene.show()
